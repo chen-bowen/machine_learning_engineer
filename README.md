@@ -1,6 +1,8 @@
 # machine_learning_engineer
 
-rojects for Machine Learning Engineer Nanodegree from Udacity
+projects for Machine Learning Engineer Nanodegree from Udacity
+
+
 
 **Project 1 - Deploying Sentiment Analysis Web App**
 
