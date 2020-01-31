@@ -38,10 +38,22 @@ class LoadData:
         self.train_test_data_save_path = train_test_data_save_path
 
     @staticmethod
-    def add_directory(base_path, image_cat, image_type):
+    def get_full_directory(base_path, image_cat, image_type):
+        """obtain the full directory from base diectory"""
+        return base_path + "/{}_{}".format(image_cat, image_type)
+
+    @staticmethod
+    def add_directory(base_path, image_cat=None, image_type=None):
         """add directory if the directory does not exist"""
-        if not path.exists(base_path + "/{}_{}".format(image_cat, image_type)):
-            mkdir(base_path + "/{}_{}".format(image_cat, image_type))
+        if (image_cat is not None) and (image_type is not None):
+            full_directory = LoadData.get_full_directory(
+                base_path, image_cat, image_type
+            )
+        else:
+            full_directory = base_path
+
+        if not path.exists(full_directory):
+            mkdir(full_directory)
 
     def image_retrieval(self):
         """ Retrieve all image data and save all images to the save path specified"""
@@ -54,8 +66,8 @@ class LoadData:
             # remove duplicates
             image_raw_list = [i[image_type] for i in image_raw_mapping]
             image_raw_list_unique = list(dict.fromkeys(image_raw_list))
-            output_img_path = self.raw_data_save_path + "/{}_{}".format(
-                self.image_cat, image_type
+            output_img_path = self.get_full_directory(
+                self.raw_data_save_path, self.image_cat, image_type
             )
 
             # get all unique images that does not exist yet
@@ -83,20 +95,17 @@ class LoadData:
         for image_type in ["product", "scene"]:
             self.add_directory(self.base_file_path, self.image_cat, image_type)
 
-        raw_scene_data_path = self.raw_data_save_path + "/{}_{}".format(
-            self.image_cat, "scene"
+        raw_scene_data_path = self.get_full_directory(
+            self.raw_data_save_path, self.image_cat, "scene"
         )
-
-        raw_product_data_path = self.raw_data_save_path + "/{}_{}".format(
-            self.image_cat, "product"
+        raw_product_data_path = self.get_full_directory(
+            self.raw_data_save_path, self.image_cat, "product"
         )
-
-        interim_scene_data_save_path = self.interim_data_save_path + "/{}_{}".format(
-            self.image_cat, "scene"
+        interim_scene_data_save_path = self.get_full_directory(
+            self.interim_data_save_path, self.image_cat, "scene"
         )
-
-        interim_product_data_save_path = self.interim_data_save_path + "/{}_{}".format(
-            self.image_cat, "product"
+        interim_product_data_save_path = self.get_full_directory(
+            self.interim_data_save_path, self.image_cat, "product"
         )
 
         if len(listdir(interim_scene_data_save_path)) == 0:
@@ -130,7 +139,6 @@ class LoadData:
                                 + "/{}_{}".format(mapping["product"], image_name),
                                 cropped_image,
                             )
-
         if len(listdir(interim_product_data_save_path)) == 0:
             # copy all the product image to interim directory
             DataPreprocessingUtilities.copy_directory(
@@ -144,13 +152,17 @@ class LoadData:
         product_scene_mapping = DataDownloadUtilities().get_metadata_list(
             self.base_file_path, self.image_cat
         )
-
         # shuffle product_scene_mapping
         np.random.shuffle(product_scene_mapping)
 
         # generate training dataset
         training_split_point = int(len(product_scene_mapping) * self.TRAINING_DATA_PCNT)
         training_data_mapping = np.array(product_scene_mapping)[:training_split_point]
+        training_directory = self.train_test_data_save_path + "training"
+        self.add_directory(training_directory)
+
+        for image_type in ["product", "scene"]:
+            self.add_directory(training_directory, self.image_cat, image_type)
 
         # generate validation dataset
         validation_split_point = (
@@ -160,9 +172,19 @@ class LoadData:
         validation_data_mapping = np.array(product_scene_mapping)[
             training_split_point:validation_split_point
         ]
+        validation_directory = self.train_test_data_save_path + "validation"
+        self.add_directory(validation_directory)
+
+        for image_type in ["product", "scene"]:
+            self.add_directory(validation_directory, self.image_cat, image_type)
 
         # generate test dataset
         test_data_mapping = np.array(product_scene_mapping)[validation_split_point:]
+        test_directory = self.train_test_data_save_path + "test"
+        self.add_directory(test_directory)
+
+        for image_type in ["product", "scene"]:
+            self.add_directory(test_directory, self.image_cat, image_type)
 
 
 if __name__ == "__main__":
