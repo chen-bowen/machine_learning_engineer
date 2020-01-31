@@ -5,6 +5,7 @@ from os import listdir, path, mkdir
 from tqdm import tqdm
 from utils.utils_data_download import DataDownloadUtilities
 from utils.utils_data_preprocessing import DataPreprocessingUtilities
+from utils.utils_train_test_split import TrainTestSplitUtilities
 
 
 class LoadData:
@@ -36,6 +37,24 @@ class LoadData:
         self.raw_data_save_path = raw_data_save_path
         self.interim_data_save_path = interim_data_save_path
         self.train_test_data_save_path = train_test_data_save_path
+        # raw data paths
+        self.raw_scene_data_path = self.get_full_directory(
+            self.raw_data_save_path, self.image_cat, "scene"
+        )
+        self.raw_product_data_path = self.get_full_directory(
+            self.raw_data_save_path, self.image_cat, "product"
+        )
+        # interim data paths
+        self.interim_scene_data_save_path = self.get_full_directory(
+            self.interim_data_save_path, self.image_cat, "scene"
+        )
+        self.interim_product_data_save_path = self.get_full_directory(
+            self.interim_data_save_path, self.image_cat, "product"
+        )
+        # training/test data paths
+        self.training_data_path = self.train_test_data_save_path + "training"
+        self.validation_data_path = self.train_test_data_save_path + "validation"
+        self.test_data_path = self.train_test_data_save_path + "test"
 
     @staticmethod
     def get_full_directory(base_path, image_cat, image_type):
@@ -95,20 +114,7 @@ class LoadData:
         for image_type in ["product", "scene"]:
             self.add_directory(self.base_file_path, self.image_cat, image_type)
 
-        raw_scene_data_path = self.get_full_directory(
-            self.raw_data_save_path, self.image_cat, "scene"
-        )
-        raw_product_data_path = self.get_full_directory(
-            self.raw_data_save_path, self.image_cat, "product"
-        )
-        interim_scene_data_save_path = self.get_full_directory(
-            self.interim_data_save_path, self.image_cat, "scene"
-        )
-        interim_product_data_save_path = self.get_full_directory(
-            self.interim_data_save_path, self.image_cat, "product"
-        )
-
-        if len(listdir(interim_scene_data_save_path)) == 0:
+        if len(listdir(self.interim_scene_data_save_path)) == 0:
             # get all the product mapping
             product_scene_mapping_unprocessed = DataDownloadUtilities().get_metadata_list(
                 self.base_file_path, self.image_cat
@@ -120,11 +126,11 @@ class LoadData:
                 # for all image mappings
                 for i, mapping in enumerate(product_scene_mapping_unprocessed):
                     # find the corresponding scene from fashion_scene_mapping
-                    if mapping["scene"] == image_name[:-4]:
+                    if (mapping["scene"] == image_name[:-4]) and (
+                        i not in product_scene_mapping_processed
+                    ):
                         # remove the mapping from the unprocessed list
-                        product_scene_mapping_processed.append(
-                            product_scene_mapping_unprocessed.pop(i)
-                        )
+                        product_scene_mapping_processed.append(i)
                         image = io.imread(raw_scene_data_path + "/" + image_name)
                         # get cropped image
                         cropped_image = DataPreprocessingUtilities.crop_image_bounding_box(
@@ -135,14 +141,14 @@ class LoadData:
                             exposure.is_low_contrast(cropped_image) == 0
                         ):
                             io.imsave(
-                                interim_scene_data_save_path
+                                self.interim_scene_data_save_path
                                 + "/{}_{}".format(mapping["product"], image_name),
                                 cropped_image,
                             )
-        if len(listdir(interim_product_data_save_path)) == 0:
+        if len(listdir(self.interim_product_data_save_path)) == 0:
             # copy all the product image to interim directory
             DataPreprocessingUtilities.copy_directory(
-                raw_product_data_path, interim_product_data_save_path
+                raw_product_data_path, self.interim_product_data_save_path
             )
 
         print("all {} images processed".format(self.image_cat))
@@ -155,36 +161,73 @@ class LoadData:
         # shuffle product_scene_mapping
         np.random.shuffle(product_scene_mapping)
 
+        # create directories
+        self.add_directory(self.training_data_path)
+        self.add_directory(self.validation_data_path)
+        self.add_directory(self.test_data_path)
+
+        for image_type in ["product", "scene"]:
+            self.add_directory(self.training_data_path, self.image_cat, image_type)
+            self.add_directory(self.validation_data_path, self.image_cat, image_type)
+            self.add_directory(self.test_data_path, self.image_cat, image_type)
+
         # generate training dataset
         training_split_point = int(len(product_scene_mapping) * self.TRAINING_DATA_PCNT)
         training_data_mapping = np.array(product_scene_mapping)[:training_split_point]
-        training_directory = self.train_test_data_save_path + "training"
-        self.add_directory(training_directory)
-
-        for image_type in ["product", "scene"]:
-            self.add_directory(training_directory, self.image_cat, image_type)
 
         # generate validation dataset
         validation_split_point = (
-            int(len(product_scene_mapping) * self.TRAINING_DATA_PCNT)
+            int(len(product_scene_mapping) * self.VALIDATION_DATA_PCNT)
             + training_split_point
         )
         validation_data_mapping = np.array(product_scene_mapping)[
             training_split_point:validation_split_point
         ]
-        validation_directory = self.train_test_data_save_path + "validation"
-        self.add_directory(validation_directory)
-
-        for image_type in ["product", "scene"]:
-            self.add_directory(validation_directory, self.image_cat, image_type)
 
         # generate test dataset
         test_data_mapping = np.array(product_scene_mapping)[validation_split_point:]
         test_directory = self.train_test_data_save_path + "test"
-        self.add_directory(test_directory)
 
-        for image_type in ["product", "scene"]:
-            self.add_directory(test_directory, self.image_cat, image_type)
+        # move images to the corresponding directory
+        all_scene_images = listdir(self.interim_scene_data_save_path)
+        all_product_images = listdir(self.interim_product_data_save_path)
+
+        training_scene_images, training_product_images = TrainTestSplitUtilities.copy_image_to_dir(
+            training_data_mapping,
+            self.image_cat,
+            all_scene_images,
+            all_product_images,
+            self.interim_data_save_path,
+            self.train_test_data_save_path + "training",
+        )
+
+        all_scene_images = list(set(all_scene_images) - set(training_scene_images))
+        all_product_images = list(
+            set(all_product_images) - set(training_product_images)
+        )
+
+        validation_scene_images, validation_product_images = TrainTestSplitUtilities.copy_image_to_dir(
+            validation_data_mapping,
+            self.image_cat,
+            all_scene_images,
+            all_product_images,
+            self.interim_data_save_path,
+            self.train_test_data_save_path + "validation",
+        )
+
+        all_scene_images = list(set(all_scene_images) - set(validation_scene_images))
+        all_product_images = list(
+            set(all_product_images) - set(validation_product_images)
+        )
+
+        test_scene_images, test_product_images = TrainTestSplitUtilities.copy_image_to_dir(
+            test_data_mapping,
+            self.image_cat,
+            all_scene_images,
+            all_product_images,
+            self.interim_data_save_path,
+            self.train_test_data_save_path + "test",
+        )
 
 
 if __name__ == "__main__":

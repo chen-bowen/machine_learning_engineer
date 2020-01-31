@@ -1,4 +1,4 @@
-from skimage import io, transform
+from skimage import io
 from cv2 import resize, INTER_CUBIC
 import numpy as np
 from os import listdir
