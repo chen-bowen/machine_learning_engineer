@@ -1,6 +1,8 @@
 from skimage import io, transform
 from cv2 import resize, INTER_CUBIC
 import numpy as np
+from os import listdir
+
 
 class DataPreprocessingUtilities:
 
@@ -19,13 +21,13 @@ class DataPreprocessingUtilities:
         left = max(0, w * left * (1 - 0.025))
         top = max(0, h * top * (1 - 0.025))
         right = min(w * right * (1 + 0.025), w - 1)
-        bottom = min(h * bottom *(1 + 0.025), h - 1)
+        bottom = min(h * bottom * (1 + 0.025), h - 1)
 
         # crop images
-        left_crop = image[:, :round(left), :]
-        right_crop = image[:, round(right):, :]
-        top_crop = image[:round(top), :, :]
-        bottom_crop = image[round(bottom):, :, :]
+        left_crop = image[:, : round(left), :]
+        right_crop = image[:, round(right) :, :]
+        top_crop = image[: round(top), :, :]
+        bottom_crop = image[round(bottom) :, :, :]
 
         # find the largest area
         cropped_list = [left_crop, top_crop, right_crop, bottom_crop]
@@ -33,25 +35,24 @@ class DataPreprocessingUtilities:
         cropped_image = cropped_list[largest_area_index]
 
         # if the cropped image is less than 1/5 of original size
-        if np.product(cropped_image.shape) < 1/5 * np.product(image.shape):
+        if np.product(cropped_image.shape) < 1 / 5 * np.product(image.shape):
             return None
 
         # reshape the image to 224 x 224
-        cropped_image = resize(cropped_image, (DataPreprocessingUtilities.MODEL_IMAGE_SIZE, 
-                                               DataPreprocessingUtilities.MODEL_IMAGE_SIZE), 
-                                               interpolation=INTER_CUBIC)
+        cropped_image = resize(
+            cropped_image,
+            (
+                DataPreprocessingUtilities.MODEL_IMAGE_SIZE,
+                DataPreprocessingUtilities.MODEL_IMAGE_SIZE,
+            ),
+            interpolation=INTER_CUBIC,
+        )
 
         return cropped_image
 
-if __name__ == "__main__":
-    import json
-    from os import listdir
-    import matplotlib.pyplot  as plt
-    with open('data/external/fashion.json') as json_file:
-        fashion_product_scene_mapping = [json.loads(line) for line in json_file]
-    images_list = listdir("data/raw/fashion_scene/")
-    image = io.imread("data/raw/fashion_scene/" + images_list[7])
-    bbox = [i for i in fashion_product_scene_mapping if i["scene"]==images_list[7][:-4]][0]['bbox']
-    cropped_image = DataPreprocessingUtilities.crop_image_bounding_box(image,bbox)
-    io.imshow(cropped_image)
-    plt.show()
+    @staticmethod
+    def copy_directory(original_dir, destination_dir):
+        """ Copy all files from original directory to destination"""
+        for filename in listdir(original_dir):
+            image = io.imread(original_dir + "/" + filename)
+            io.imsave(destination_dir + "/" + filename, image)

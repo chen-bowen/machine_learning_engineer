@@ -4,3 +4,4 @@ data/processed
 data/raw
 notebooks/.ipynb_checkpoints
 __pycache__
+.vscode
