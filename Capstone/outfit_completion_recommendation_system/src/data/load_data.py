@@ -2,6 +2,7 @@ from skimage import io, exposure
 import h5py
 import numpy as np
 from os import listdir, path, mkdir
+import glob
 from tqdm import tqdm
 from utils.utils_data_download import DataDownloadUtilities
 from utils.utils_data_preprocessing import DataPreprocessingUtilities
@@ -65,9 +66,7 @@ class LoadData:
     def add_directory(base_path, image_cat=None, image_type=None):
         """add directory if the directory does not exist"""
         if (image_cat is not None) and (image_type is not None):
-            full_directory = LoadData.get_full_directory(
-                base_path, image_cat, image_type
-            )
+            full_directory = LoadData.get_full_directory(base_path, image_cat, image_type)
         else:
             full_directory = base_path
 
@@ -80,8 +79,10 @@ class LoadData:
             self.base_file_path, self.image_cat
         )
 
+        failed_images_url = []
+
         for image_type in ["product", "scene"]:
-            self.add_directory(self.base_file_path, self.image_cat, image_type)
+            self.add_directory(self.interim_data_save_path, self.image_cat, image_type)
             # remove duplicates
             image_raw_list = [i[image_type] for i in image_raw_mapping]
             image_raw_list_unique = list(dict.fromkeys(image_raw_list))
@@ -102,11 +103,15 @@ class LoadData:
                         img = io.imread(image_url)
                         io.imsave(output_img_path + "/{}.jpg".format(signature), img)
                     except:
-                        print(image_url)
+                        failed_images_url.append(image_url)
                 print("{} new images retrieved".format(len(image_raw_list_unique_new)))
-
             else:
                 print("no new images detected, using archived images")
+
+            if len(failed_images_url) > 0:
+                print("The following images retrieval have failed")
+                for url in failed_images_url:
+                    print(url)
 
     def process_all_images(self):
         """ Crop all the images based on the bounding box and resize them to 224 x 224"""
@@ -114,7 +119,11 @@ class LoadData:
         for image_type in ["product", "scene"]:
             self.add_directory(self.base_file_path, self.image_cat, image_type)
 
-        if len(listdir(self.interim_scene_data_save_path)) == 0:
+        files_interim = [
+            f for f in listdir(self.interim_scene_data_save_path) if not f.startswith(".")
+        ]
+
+        if len(files_interim) == 0:
             # get all the product mapping
             product_scene_mapping_unprocessed = DataDownloadUtilities().get_metadata_list(
                 self.base_file_path, self.image_cat
@@ -122,7 +131,8 @@ class LoadData:
             product_scene_mapping_processed = []
 
             # for all scenes
-            for image_name in listdir(raw_scene_data_path):
+            print("Processing scene images")
+            for image_name in tqdm(listdir(self.raw_scene_data_path)):
                 # for all image mappings
                 for i, mapping in enumerate(product_scene_mapping_unprocessed):
                     # find the corresponding scene from fashion_scene_mapping
@@ -131,7 +141,7 @@ class LoadData:
                     ):
                         # remove the mapping from the unprocessed list
                         product_scene_mapping_processed.append(i)
-                        image = io.imread(raw_scene_data_path + "/" + image_name)
+                        image = io.imread(self.raw_scene_data_path + "/" + image_name)
                         # get cropped image
                         cropped_image = DataPreprocessingUtilities.crop_image_bounding_box(
                             image, mapping["bbox"]
@@ -145,10 +155,11 @@ class LoadData:
                                 + "/{}_{}".format(mapping["product"], image_name),
                                 cropped_image,
                             )
-        if len(listdir(self.interim_product_data_save_path)) == 0:
+        if len(files_interim) == 0:
             # copy all the product image to interim directory
+            print("processing product images")
             DataPreprocessingUtilities.copy_directory(
-                raw_product_data_path, self.interim_product_data_save_path
+                self.raw_product_data_path, self.interim_product_data_save_path
             )
 
         print("all {} images processed".format(self.image_cat))
@@ -189,9 +200,14 @@ class LoadData:
         test_directory = self.train_test_data_save_path + "test"
 
         # move images to the corresponding directory
-        all_scene_images = listdir(self.interim_scene_data_save_path)
-        all_product_images = listdir(self.interim_product_data_save_path)
-
+        all_scene_images = [
+            f for f in listdir(self.interim_scene_data_save_path) if not f.startswith(".")
+        ]
+        all_product_images = [
+            f
+            for f in listdir(self.interim_product_data_save_path)
+            if not f.startswith(".")
+        ]
         training_scene_images, training_product_images = TrainTestSplitUtilities.copy_image_to_dir(
             training_data_mapping,
             self.image_cat,
@@ -202,9 +218,7 @@ class LoadData:
         )
 
         all_scene_images = list(set(all_scene_images) - set(training_scene_images))
-        all_product_images = list(
-            set(all_product_images) - set(training_product_images)
-        )
+        all_product_images = list(set(all_product_images) - set(training_product_images))
 
         validation_scene_images, validation_product_images = TrainTestSplitUtilities.copy_image_to_dir(
             validation_data_mapping,
@@ -231,4 +245,4 @@ class LoadData:
 
 
 if __name__ == "__main__":
-    LoadData("fashion").create_train_test_validation_data()
+    LoadData("home").create_train_test_validation_data()

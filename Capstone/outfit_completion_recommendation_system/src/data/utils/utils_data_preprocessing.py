@@ -14,20 +14,39 @@ class DataPreprocessingUtilities:
     @staticmethod
     def crop_image_bounding_box(image, bounding_box):
         """ Find the largest cropped image by cropping from left, right, top, bottom"""
-        h, w, _ = image.shape
+
         left, top, right, bottom = bounding_box
 
-        # enlarge the bounding box by 5% and get the image crop point
-        left = max(0, w * left * (1 - 0.025))
-        top = max(0, h * top * (1 - 0.025))
-        right = min(w * right * (1 + 0.025), w - 1)
-        bottom = min(h * bottom * (1 + 0.025), h - 1)
+        try:
+            h, w, _ = image.shape
 
-        # crop images
-        left_crop = image[:, : round(left), :]
-        right_crop = image[:, round(right) :, :]
-        top_crop = image[: round(top), :, :]
-        bottom_crop = image[round(bottom) :, :, :]
+            # enlarge the bounding box by 5% and get the image crop point
+            left = max(0, w * left * (1 - 0.025))
+            top = max(0, h * top * (1 - 0.025))
+            right = min(w * right * (1 + 0.025), w - 1)
+            bottom = min(h * bottom * (1 + 0.025), h - 1)
+
+            # crop images
+            left_crop = image[:, : round(left), :]
+            right_crop = image[:, round(right) :, :]
+            top_crop = image[: round(top), :, :]
+            bottom_crop = image[round(bottom) :, :, :]
+
+        except ValueError:
+
+            h, w = image.shape
+
+            # enlarge the bounding box by 5% and get the image crop point
+            left = max(0, w * left * (1 - 0.025))
+            top = max(0, h * top * (1 - 0.025))
+            right = min(w * right * (1 + 0.025), w - 1)
+            bottom = min(h * bottom * (1 + 0.025), h - 1)
+
+            # crop images
+            left_crop = image[:, : round(left)]
+            right_crop = image[:, round(right) :]
+            top_crop = image[: round(top), :]
+            bottom_crop = image[round(bottom) :, :]
 
         # find the largest area
         cropped_list = [left_crop, top_crop, right_crop, bottom_crop]
