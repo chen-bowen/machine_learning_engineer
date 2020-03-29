@@ -1,8 +1,6 @@
 from skimage import io, exposure
-import h5py
 import numpy as np
 from os import listdir, path, mkdir
-import glob
 from tqdm import tqdm
 from utils.utils_data_download import DataDownloadUtilities
 from utils.utils_data_preprocessing import DataPreprocessingUtilities
@@ -170,6 +168,7 @@ class LoadData:
             self.base_file_path, self.image_cat
         )
         # shuffle product_scene_mapping
+        np.random.seed(7)
         np.random.shuffle(product_scene_mapping)
 
         # create directories
@@ -208,6 +207,7 @@ class LoadData:
             for f in listdir(self.interim_product_data_save_path)
             if not f.startswith(".")
         ]
+
         training_scene_images, training_product_images = TrainTestSplitUtilities.copy_image_to_dir(
             training_data_mapping,
             self.image_cat,
@@ -245,4 +245,4 @@ class LoadData:
 
 
 if __name__ == "__main__":
-    LoadData("home").create_train_test_validation_data()
+    LoadData("fashion").create_train_test_validation_data()
