@@ -4,6 +4,7 @@ import tensorflow as tf
 class TFDataset:
 
     MODEL_IMAGE_SIZE = 224
+    NUM_AUGUMENT_SAMPLES = 8
 
     def __init__(self, image_cat):
 
@@ -13,45 +14,6 @@ class TFDataset:
     def set_paths(self, train_test_data_save_path):
         """Set all the base paths for """
         self.train_test_data_save_path = train_test_data_save_path
-
-    @staticmethod
-    def get_label(file_path):
-        # convert the path to a list of path components
-        parts = tf.strings.split(file_path, os.path.sep)
-        # string before .jpg, after _ is the label
-        file_name = tf.strings.split(parts[-1], "_")
-        label_name = tf.strings.split(file_name[1], ".")[0]
-        return label_name
-
-    @staticmethod
-    def decode_img(img):
-        # convert the compressed string to a 3D uint8 tensor
-        img = tf.image.decode_jpeg(img, channels=3)
-        # Use `convert_image_dtype` to convert to floats in the [0,1] range.
-        img = tf.image.convert_image_dtype(img, tf.float32)
-        # resize the image to the desired size.
-        return img
-
-    @staticmethod
-    def process_image(file_path, data_type):
-        label = get_label(file_path)
-        # load the raw data from the file as a string
-        img = tf.io.read_file(file_path)
-        img = decode_img(img)
-        if data_type != "test":
-            return img, label
-        return img
-
-    def get_tf_dataset(self, data_type):
-        """create tensorflow dataset for both label image and data image, 
-            given what type of data is"""
-        data_path = self.train_test_data_save_path + "/" + data_type
-        list_data_dir = tf.data.Dataset.list_files(str(data_path))
-        labeled_data = list_data_dir.map(
-            lambda record: self.process_image(record, data_type),
-            num_parallel_calls=tf.data.experimental.AUTOTUNE,
-        )
-        return labeled_data
 
     @staticmethod
     def rotate(x: tf.Tensor) -> tf.Tensor:
@@ -138,3 +100,57 @@ class TFDataset:
 
         # Only apply cropping 50% of the time
         return tf.cond(choice < 0.5, lambda: x, lambda: random_crop(x))
+
+    @staticmethod
+    def get_label(file_path):
+        # convert the path to a list of path components
+        parts = tf.strings.split(file_path, os.path.sep)
+        # string before .jpg, after _ is the label
+        file_name = tf.strings.split(parts[-1], "_")
+        label_name = tf.strings.split(file_name[1], ".")[0]
+        return label_name
+
+    @staticmethod
+    def decode_img(img):
+        # convert the compressed string to a 3D uint8 tensor
+        img = tf.image.decode_jpeg(img, channels=3)
+        # Use `convert_image_dtype` to convert to floats in the [0,1] range.
+        img = tf.image.convert_image_dtype(img, tf.float32)
+        # resize the image to the desired size.
+        return img
+
+    @staticmethod
+    def process_image(file_path, data_type):
+        label = get_label(file_path)
+        # load the raw data from the file as a string
+        img = tf.io.read_file(file_path)
+        img = decode_img(img)
+        augmentations = [
+            TFDataset.flip,
+            TFDataset.color,
+            TFDataset.zoom,
+            TFDataset.rotate,
+        ]
+
+        # random add data augumentations
+        if data_type != "test":
+            applied_f = augmentations[np.random.choice(len(augmentations), 1)[0]]
+            img = tf.cond(
+                tf.random.uniform([], 0, 1) > 0.75, lambda: applied_f(img), lambda: img
+            )
+            return img, label
+
+        return img
+
+    def get_tf_dataset(self, data_type):
+        """create tensorflow dataset for both label image and data image, 
+            given what type of data is"""
+        data_path = self.train_test_data_save_path + "/" + data_type
+        list_data_dir = tf.data.Dataset.list_files(str(data_path)).repeat(
+            TFDataset.NUM_AUGUMENT_SAMPLES
+        )
+        labeled_data = list_data_dir.map(
+            lambda record: self.process_image(record, data_type),
+            num_parallel_calls=tf.data.experimental.AUTOTUNE,
+        )
+        return labeled_data
