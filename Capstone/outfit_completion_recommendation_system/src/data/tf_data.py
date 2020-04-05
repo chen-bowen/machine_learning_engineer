@@ -1,4 +1,6 @@
 import tensorflow as tf
+import os
+import numpy as np
 
 
 class TFDataset:
@@ -6,9 +8,10 @@ class TFDataset:
     MODEL_IMAGE_SIZE = 224
     NUM_AUGUMENT_SAMPLES = 8
 
-    def __init__(self, image_cat):
+    def __init__(self, image_cat, product_type):
 
         self.image_cat = image_cat
+        self.product_type = product_type
         self.set_paths(train_test_data_save_path="data/processed/")
 
     def set_paths(self, train_test_data_save_path):
@@ -121,10 +124,10 @@ class TFDataset:
 
     @staticmethod
     def process_image(file_path, data_type):
-        label = get_label(file_path)
+        label = TFDataset.get_label(file_path)
         # load the raw data from the file as a string
         img = tf.io.read_file(file_path)
-        img = decode_img(img)
+        img = TFDataset.decode_img(img)
         augmentations = [
             TFDataset.flip,
             TFDataset.color,
@@ -133,7 +136,7 @@ class TFDataset:
         ]
 
         # random add data augumentations
-        if data_type != "test":
+        if data_type == "training":
             applied_f = augmentations[np.random.choice(len(augmentations), 1)[0]]
             img = tf.cond(
                 tf.random.uniform([], 0, 1) > 0.75, lambda: applied_f(img), lambda: img
@@ -145,7 +148,13 @@ class TFDataset:
     def get_tf_dataset(self, data_type):
         """create tensorflow dataset for both label image and data image, 
             given what type of data is"""
-        data_path = self.train_test_data_save_path + "/" + data_type
+        data_path = (
+            self.train_test_data_save_path
+            + "/"
+            + data_type
+            + "/{}_{}/*".format(self.image_cat, self.product_type)
+        )
+
         list_data_dir = tf.data.Dataset.list_files(str(data_path)).repeat(
             TFDataset.NUM_AUGUMENT_SAMPLES
         )
